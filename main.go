@@ -103,6 +103,9 @@ func newMinfsDriver(mountRoot string) *minfsDriver {
 // https://docs.docker.com/engine/extend/plugins_volume/#/volumedrivercreate for more details.
 // Additional options can be passed only during call to `Create`,
 // $ docker volume create -d <plugin-name> --name <volume-name> -o <option-key>=<option-value>
+// The name of the volume uniquely identifies the mount.
+// The remote bucket will be mounted at `mountRoot + volumeName`.
+// mountRoot is passed as `--mountroot` flag when starting the server.
 func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	logrus.WithField("method", "Create").Debugf("%#v", r)
 	// hold lock for safe access.
@@ -113,11 +116,16 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	if r.Name == "" {
 		return errorResponse("Name of the driver cannot be empty.Use `$ docker volume create -d <plugin-name> --name <volume-name>`")
 	}
-	// verify whether a volume by the given name already exists.
+	// TODO: verify whether a volume by the given name already exists.
 	// if the volume is already created verify that the server configs match.
+	// If not return with error/
 	if ok := d.mounts[r.Name]; ok {
 
 	}
+
+	// TODO: Verify if the bucket by the name of the volume exists.
+	// If it doesnt exist create the bucket on the remote Minio server.
+
 	// verify that all the options are set when the volume is created.
 	if r.Options == nil {
 		return errorResponse("No options provided. Please refer example usage.")
@@ -158,6 +166,7 @@ func errorResponse(err string) volume.Response {
 	return volume.Response{Err: err}
 }
 
+// TODO : Add comments, clean up and fix errors.
 func (d *minfsDriver) Remove(r volume.Request) volume.Response {
 	logrus.WithField("method", "remove").Debugf("%#v", r)
 
@@ -284,15 +293,15 @@ func (d *minfsDriver) Capabilities(r volume.Request) volume.Response {
 }
 
 func (d *minfsDriver) mountVolume(v *mountInfo) error {
+	// TODO: mount here.
 	cmd := fmt.Sprintf("<mount here>")
-	if v.password != "" {
-		cmd = fmt.Sprintf("echo %s | %s -o workaround=rename -o password_stdin", v.password, cmd)
-	}
+
 	logrus.Debug(cmd)
 	return exec.Command("sh", "-c", cmd).Run()
 }
 
 func (d *minfsDriver) unmountVolume(target string) error {
+	// TODO: Unmount here.
 	cmd := fmt.Sprintf("umount %s", target)
 	logrus.Debug(cmd)
 	return exec.Command("sh", "-c", cmd).Run()
