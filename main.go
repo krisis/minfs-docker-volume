@@ -202,8 +202,23 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	}
 	// mountpoint is the local path where the remote bucket is mounted.
 	// `mountroot` is passed as an argument while starting the server with `--mountroot` option.
-	// the given bucket is mounted locally at path `mountroot + volume (r.Name,name of the volume passed by docker when a volume is created).
-	mntInfo.mountPoint = filepath.Join(d.mountRoot, r.Name)
+	// the given bucket is mounted locally at path `mountroot + volume (r.Name is the name of the volume passed by docker when a volume is created).
+	mountpoint := filepath.Join(d.mountRoot, r.Name)
+	// create the directory for the mountpoint.
+	// This will be the directory at which the remote bucket will be mounted.
+	err = createDir(mountpoint)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"mountpount": mountpoint,
+		}).Fatalf("Error creating directory for the mountpoint. <ERROR> %v.", err)
+		return errorResponse(err.Error())
+	}
+	// cache the info.
+	mntInfo.mountPoint = mountpoint
+	// `Create` is the only function which has the abiility to pass additional options.
+	// Protocol doc: https://docs.docker.com/engine/extend/plugins_volume/#/volumedrivercreate
+	// the server config info which is required for the mount later is also passed as an option during create.
+	// This has to be cached for further usage.
 	mntInfo.Config = config
 	// `r.Name` contains the plugin name passed with `--name` in `$ docker volume create -d <plugin-name> --name <volume-name>`.
 	// Name of the volume uniquely identifies the mount.
@@ -272,7 +287,8 @@ func errorResponse(err string) volume.Response {
 }
 
 // minfsDriver.Remove - Delete the specified volume from disk.
-// This request is issued when a user invokes docker rm -v to remove volumes associated with a container.
+// This request is issued when a user invokes `docker rm -v` to remove volumes associated with a container.
+// Protocol doc: https://docs.docker.com/engine/extend/plugins_volume/#/volumedriverremove
 func (d *minfsDriver) Remove(r volume.Request) volume.Response {
 	logrus.WithField("method", "remove").Debugf("%#v", r)
 
@@ -291,17 +307,36 @@ func (d *minfsDriver) Remove(r volume.Request) volume.Response {
 	// The volume should be under use by any other containers.
 	// verify if the number of connections is 0.
 	if v.connections == 0 {
-
+		// if the count of existing connections is 0, delete the entry for the volume.
 		if err := os.RemoveAll(d.mountpoint); err != nil {
 			return responseError(err.Error())
 		}
-		delete(d.volumes, r.Name)
+		// Delete the entry for the mount.
+		delete(d.mounts, r.Name)
 		return volume.Response{}
 	}
-	logrus.WithField("volume", r.Name).Debugf("%#v", r)
-	return responseError(fmt.Sprintf("volume %s is currently used by a container", r.Name))
+	// volume is being used by one or more containers.
+	// log and return error to docker daemon.
+	logrus.WithFields(logrus.Fields{
+		"volume": r.Name,
+	}).Errorf("Volume is currently used by %d containers. ", v.connections)
+
+	return responseError(fmt.Sprintf("volume %s is currently under use.", r.Name))
 }
 
+// create directory for the given path.
+func createDir(path string) error {
+	err = os.Mkdir(preparePath(volumeDir), 0777)
+	if err != nil {
+		// ignore if the directory already exists.
+		if os.IsExist(err) {
+			return nil
+		} else if os.IsPermission(err) {
+			return err
+		}
+		return err
+	}
+}
 func (d *minfsDriver) Path(r volume.Request) volume.Response {
 	logrus.WithField("method", "path").Debugf("%#v", r)
 
