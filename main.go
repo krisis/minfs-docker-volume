@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,8 @@ import (
 // A unix server is started at the `socketAdress` to enable discovery of this plugin by docker.
 const (
 	socketAddress = "/run/docker/plugins/minfs.sock"
+
+	defaultLocation = "us-east-1"
 )
 
 // configuration values of the remote Minio server.
@@ -116,15 +119,24 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	if r.Name == "" {
 		return errorResponse("Name of the driver cannot be empty.Use `$ docker volume create -d <plugin-name> --name <volume-name>`")
 	}
-	// TODO: verify whether a volume by the given name already exists.
 	// if the volume is already created verify that the server configs match.
-	// If not return with error/
-	if ok := d.mounts[r.Name]; ok {
-
+	// If not return with error.
+	// Since the plugin system identifies a mount uniquely by its name,
+	// its not possible to create a duplicate volume pointing to a different Minio server or bucket.
+	if mntInfo, ok := d.mounts[r.Name]; ok {
+		// Since the volume by the given name already exists,
+		// match to see whether the endpoint, bucket, accessKey and secretKey of the
+		// new  request and the existing entry match.
+		// return error on mismatch.
+		// else return with success message,
+		// Since the volume already exists no need to proceed further.
+		err := matchServerConfig(mntInfo.config, r)
+		if err != nil {
+			return errorResponse(err.Error())
+		}
+		// return success since the volume exists and the configs match.
+		return volume.Response{}
 	}
-
-	// TODO: Verify if the bucket by the name of the volume exists.
-	// If it doesnt exist create the bucket on the remote Minio server.
 
 	// verify that all the options are set when the volume is created.
 	if r.Options == nil {
@@ -152,12 +164,105 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	config.secretKey = r.Options["secret-key"]
 	config.accessKey = r.Options["access-key"]
 
+	// find out whether the scheme of the URL is HTTPS.
+	enableSSL, err := isSSL(config.endpoint)
+	if err != nil {
+		logrus.Error("Please send a valid URL of form http(s)://my-minio.com:9000 <ERROR> ", err.Error())
+		return err
+	}
+
+	// Verify if the bucket exists.
+	// If it doesnt exist create the bucket on the remote Minio server.
+	// Initialize minio client object.
+	minioClient, err := minio.New(config.endpoint, config.accessKey, config.secretAccess, enableSSL)
+	if err != nil {
+		logrus.Error("Error creating new Minio client. <Error> %s", err.Error())
+		return errorResoponse(err.Error())
+	}
+	// Create a bucket.
+	err = minioClient.MakeBucket(bucketName, defaultLocation)
+	if err != nil {
+		// Check to see if we already own this bucket.
+		exists, eErr := minioClient.BucketExists(bucketName)
+		if eErr == nil && exists {
+			// bucket already exists log and return with success.
+			logrus.WithFields(logrus.Fields{
+				"endpoint": config.endpoint,
+				"bucket":   config.bucket,
+			}).Info("Bucket already exisits.")
+		}
+		// return with error response to docker daemon.
+		if eErr != nil || err != nil {
+			logrus.WithFields(logrus.Fields{
+				"endpoint": config.endpoint,
+				"bucket":   config.bucket,
+			}).Fatal(err.Error())
+			return errorResponse(err.Error())
+		}
+	}
+	// mountpoint is the local path where the remote bucket is mounted.
+	// `mountroot` is passed as an argument while starting the server with `--mountroot` option.
+	// the given bucket is mounted locally at path `mountroot + volume (r.Name,name of the volume passed by docker when a volume is created).
 	mntInfo.mountPoint = filepath.Join(d.mountRoot, r.Name)
 	mntInfo.Config = config
 	// `r.Name` contains the plugin name passed with `--name` in `$ docker volume create -d <plugin-name> --name <volume-name>`.
-	// Name of the volume uniquely identiifies the mount.
-	d.volumes[r.Name] = v
+	// Name of the volume uniquely identifies the mount.
+	d.mounts[r.Name] = mntInfo
 	return volume.Response{}
+}
+
+// determines if the url has HTTPS scheme.
+func isSSL(url string) (bool, error) {
+	scheme, err := getScheme(url)
+	if err != nil {
+		return false, err
+	}
+	if scheme == "https" {
+		return true, nil
+	}
+	return false, nil
+
+}
+
+// Parse the server endpoint to find out the scheme(http,https...).
+func getScheme(url string) (string, error) {
+	// parse the URL.
+	u, err := url.Parse(config.endpoint)
+	if err != nil {
+		return "", err
+	}
+	// return the scheme.
+	return u.Scheme, nil
+}
+
+// If the requested volume alredy exists, then its necessary that the server configs (Minio server endpoint,
+// bucket,accessKey and secretKey matches with the existing one.
+// Since a mount is uniquely identified by its volume name its not possible to have a duplicate entry.
+func matchServerConfig(config serverConfig, r volume.Request) error {
+	if r.Options == nil {
+		return fmt.Errorf("No options provided. Please refer example usage.")
+	}
+	// Compare the endpoints.
+	if r.Options["endpoint"] == config.endpoint {
+		return fmt.Errorf("Volume \"%s\" already exists and is pointing to Minio server\"%s\",Cannot create duplicate volume.",
+			r.Name, config.endpoint)
+	}
+	// Compare the bucket name.
+	if r.Options["bucket"] == config.bucket {
+		return fmt.Errorf("Volume \"%s\" already exists and is pointing to Minio server \"%s\", and bucket \"%s\",Cannot create duplicate volume.",
+			r.Name, config.endpoint)
+	}
+	// compare the access keys.
+	if r.Options["access-key"] == "" {
+		return fmt.Errorf("Volume \"%s\" already exists, access key mismatch.", r.Name)
+
+	}
+	// compare the secret keys.
+	if r.Options["secret-key"] == "" {
+		return fmt.Errorf("Volume \"%s\" already exists, secret key mismatch.", r.Name)
+	}
+	// match successful, return `nil` error.
+	return nil
 }
 
 // Error repsonse to be sent to docker on failure of any operation.
@@ -166,25 +271,34 @@ func errorResponse(err string) volume.Response {
 	return volume.Response{Err: err}
 }
 
-// TODO : Add comments, clean up and fix errors.
+// minfsDriver.Remove - Delete the specified volume from disk.
+// This request is issued when a user invokes docker rm -v to remove volumes associated with a container.
 func (d *minfsDriver) Remove(r volume.Request) volume.Response {
 	logrus.WithField("method", "remove").Debugf("%#v", r)
 
 	d.Lock()
 	defer d.Unlock()
 
-	v, ok := d.volumes[r.Name]
+	v, ok := d.mounts[r.Name]
+	// volume doesn't exist in the entry.
+	// log and return error to docker daemon.
 	if !ok {
+		logrus.WithFields(logrus.Fields{
+			"volume": r.Name,
+		}).Error("Volume not found.")
 		return responseError(fmt.Sprintf("volume %s not found", r.Name))
 	}
-
+	// The volume should be under use by any other containers.
+	// verify if the number of connections is 0.
 	if v.connections == 0 {
-		if err := os.RemoveAll(v.mountpoint); err != nil {
+
+		if err := os.RemoveAll(d.mountpoint); err != nil {
 			return responseError(err.Error())
 		}
 		delete(d.volumes, r.Name)
 		return volume.Response{}
 	}
+	logrus.WithField("volume", r.Name).Debugf("%#v", r)
 	return responseError(fmt.Sprintf("volume %s is currently used by a container", r.Name))
 }
 

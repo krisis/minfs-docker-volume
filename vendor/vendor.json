@@ -33,6 +33,36 @@
 			"revisionTime": "2017-01-14T20:54:50Z"
 		},
 		{
+			"checksumSHA1": "P45vuk7tIHWXM49IcPHB5TDDYj8=",
+			"path": "github.com/minio/minio-go",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "neH34/65OXeKHM/MlV8MbhcdFBc=",
+			"path": "github.com/minio/minio-go/pkg/policy",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "m/6/na9lVtamkfmIdIOi5pdccgw=",
+			"path": "github.com/minio/minio-go/pkg/s3signer",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "gRnCFKb4x83GBLVUZXoOjujd+U0=",
+			"path": "github.com/minio/minio-go/pkg/s3utils",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "maUy+dbN6VfTTnfErrAW2lLit1w=",
+			"path": "github.com/minio/minio-go/pkg/set",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
 			"checksumSHA1": "LvdVRE0FqdR68SvVpRkHs1rxhcA=",
 			"path": "golang.org/x/net/proxy",
 			"revision": "f2499483f923065a842d38eb4c7f1927e6fc6e6d",
