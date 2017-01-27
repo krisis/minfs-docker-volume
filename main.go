@@ -46,7 +46,7 @@ const (
 // Minfs uses this info the mount the remote bucket.
 // The server info (endpoint, accessKey and secret Key) is passed during creating a docker volume.
 // Here is how to do it,
-// $ docker volume create -d minfs-plugin \
+// $ docker volume create -d minfs \
 //    --name medical-imaging-store \
 //     -o endpoint=https://play.minio.io:9000/rao -o access_key=Q3AM3UQ867SPQQA43P2F\
 //     -o secret-key=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG -o bucket=test-bucket
@@ -188,12 +188,17 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 		return errorResponse(err.Error())
 	}
 
+	minioHost, err := getHost(config.endpoint)
+	if err != nil {
+		logrus.Error("Please send a valid URL of form http(s)://my-minio.com:9000 <ERROR> ", err.Error())
+		return errorResponse(err.Error())
+	}
 	// Verify if the bucket exists.
 	// If it doesnt exist create the bucket on the remote Minio server.
 	// Initialize minio client object.
-	minioClient, err := minio.New(config.endpoint, config.accessKey, config.secretKey, enableSSL)
+	minioClient, err := minio.New(minioHost, config.accessKey, config.secretKey, enableSSL)
 	if err != nil {
-		logrus.Error("Error creating new Minio client. <Error> %s", err.Error())
+		logrus.Errorf("Error creating new Minio client. <Error> %s", err.Error())
 		return errorResponse(err.Error())
 	}
 	// Create a bucket.
@@ -232,6 +237,15 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	// Name of the volume uniquely identifies the mount.
 	d.mounts[r.Name] = mntInfo
 	return volume.Response{}
+}
+
+// return `Host` from the URL endpoint.
+func getHost(endpoint string) (string, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
+	}
+	return u.Host, nil
 }
 
 // determines if the url has HTTPS scheme.
@@ -547,6 +561,7 @@ func main() {
 	// --mountroot flag defines the root folder where are the volumes are mounted.
 	// If the option is not specified '/tmp' is taken as default mount root.
 	mountRoot := flag.String("mountroot", "/tmp", "root for mouting Minio buckets.")
+	flag.Parse()
 	// check if the mount root exists.
 	// create if it doesn't exist.
 	err := createDir(*mountRoot)
