@@ -48,7 +48,7 @@ const (
 // Here is how to do it,
 // $ docker volume create -d minfs \
 //    --name medical-imaging-store \
-//     -o endpoint=https://play.minio.io:9000/rao -o access_key=Q3AM3UQ867SPQQA43P2F\
+//     -o endpoint=https://play.minio.io:9000 -o access_key=Q3AM3UQ867SPQQA43P2F\
 //     -o secret-key=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG -o bucket=test-bucket
 //
 type serverConfig struct {
