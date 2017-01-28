@@ -212,9 +212,8 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 				"endpoint": config.endpoint,
 				"bucket":   config.bucket,
 			}).Info("Bucket already exisits.")
-		}
-		// return with error response to docker daemon.
-		if eErr != nil || err != nil {
+		} else {
+			// return with error response to docker daemon.
 			logrus.WithFields(logrus.Fields{
 				"endpoint": config.endpoint,
 				"bucket":   config.bucket,
@@ -444,7 +443,7 @@ func (d *minfsDriver) Mount(r volume.MountRequest) volume.Response {
 			"mountpount": v.mountPoint,
 			"endpoint":   v.config.endpoint,
 			"bucket":     v.config.bucket,
-		}).Fatalf("Mount failed.")
+		}).Fatalf("Mount failed: <ERROR> %v", err)
 
 		return errorResponse(err.Error())
 	}
@@ -536,10 +535,9 @@ func (d *minfsDriver) mountVolume(v mountInfo) error {
 	// URL for the bucket (ex: https://play.minio.io:9000/mybucket).
 	var bucketPath string
 	if strings.HasSuffix(v.config.endpoint, "/") {
-
-		bucketPath = v.config.endpoint + v.config.endpoint
+		bucketPath = v.config.endpoint + v.config.bucket
 	} else {
-		bucketPath = v.config.endpoint + "/" + v.config.endpoint
+		bucketPath = v.config.endpoint + "/" + v.config.bucket
 	}
 	// mount command for minfs.
 	// ex:  mount -t minfs https://play.minio.io:9000/testbucket /testbucket
