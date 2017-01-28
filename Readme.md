@@ -1,6 +1,6 @@
-## Docker volume driver for MinFS.
+# Docker volume driver for MinFS.
 
-# Install instructions.
+## Install instructions.
 - Fetch and build the driver.
   ```sh
   $ go get github.com/minio/minfs-docker-volume
@@ -19,7 +19,7 @@
      -o bucket=test-bucket
   ```
   
- - Share the new volume with a container and start using it.
+- Share the new volume with a container and start using it.
    ```
    docker run -it -v medical-imaging-store:/data busybox /bin/sh
    ```
