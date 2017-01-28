@@ -33,8 +33,8 @@ import (
 )
 
 // Used for Plugin discovery.
-// Docker identifies the existence of an active plugin process by seraching for
-// a unit socket file (.sock) file in /run/docker/plugins/.
+// Docker identifies the existence of an active plugin process by searching for
+// a unit socket file (.sock) in /run/docker/plugins/.
 // A unix server is started at the `socketAdress` to enable discovery of this plugin by docker.
 const (
 	socketAddress = "/run/docker/plugins/minfs.sock"
@@ -42,15 +42,14 @@ const (
 	defaultLocation = "us-east-1"
 )
 
-// configuration values of the remote Minio server.
-// Minfs uses this info the mount the remote bucket.
+// `serconfig` struct is used to store configuration values of the remote Minio server.
+// Minfs uses this info to the mount the remote bucket.
 // The server info (endpoint, accessKey and secret Key) is passed during creating a docker volume.
 // Here is how to do it,
 // $ docker volume create -d minfs \
 //    --name medical-imaging-store \
 //     -o endpoint=https://play.minio.io:9000 -o access_key=Q3AM3UQ867SPQQA43P2F\
 //     -o secret-key=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG -o bucket=test-bucket
-//
 type serverConfig struct {
 	// Endpoint of the remote Minio server.
 	endpoint string
@@ -62,7 +61,7 @@ type serverConfig struct {
 	secretKey string
 }
 
-// represents an instance of `minfs` mount of remote Minio bucket.
+// Represents an instance of `minfs` mount of remote Minio bucket.
 // Its defined by
 //   - The server info for the mount.
 //   - The local mountpoint.
@@ -73,12 +72,13 @@ type mountInfo struct {
 	// the number of containers using the mount.
 	// an active mount is done when the count is 0.
 	// unmount is done only if the number of connections is 0.
+	// otherwise just the count is decreased.
 	connections int
 }
 
 // minfsDriver - The struct implements the `github.com/docker/go-plugins-helpers/volume.Driver` interface.
 // Here are the sequence of events that defines the interaction between docker and the plugin server.
-// 1. Implement the interface defined in `github.com/docker/go-plugins-helpers/volume.Driver`.
+// 1. The driver implements the interface defined in `github.com/docker/go-plugins-helpers/volume.Driver`.
 //    In our case the struct `minfsDriver` implements the interface.
 // 2. Create a new instance of `minfsDriver` and register it with the `go-plugin-helper`.
 //    `go-plugin-helper` is a tool built to make development of docker plugins easier, visit https://github.com/docker/go-plugins-helpers/.
@@ -97,7 +97,7 @@ type minfsDriver struct {
 	// the local path to which the remote Minio bucket is mounted to.
 
 	// An active volume driver server can be used to mount multiple
-	// remote buckets possibly even referring to even different Minio server
+	// remote buckets possibly even referring to different Minio server
 	// instances or buckets.
 	// The state info of these mounts are maintained here.
 	mounts map[string]*mountInfo
@@ -125,7 +125,7 @@ func newMinfsDriver(mountRoot string) *minfsDriver {
 // $ docker volume create -d <plugin-name> --name <volume-name> -o <option-key>=<option-value>
 // The name of the volume uniquely identifies the mount.
 // The remote bucket will be mounted at `mountRoot + volumeName`.
-// mountRoot is passed as `--mountroot` flag when starting the server.
+// mountRoot is passed as `--mountroot` flag when starting the plugin server.
 func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	logrus.WithField("method", "Create").Debugf("%#v", r)
 	// hold lock for safe access.
